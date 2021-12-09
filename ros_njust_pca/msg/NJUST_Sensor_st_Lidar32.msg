@@ -1,0 +1,2 @@
+int64 timestamp
+NJUST_Sensor_st_Lidar32Point[] points

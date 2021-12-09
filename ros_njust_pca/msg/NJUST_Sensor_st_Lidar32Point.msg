@@ -1,0 +1,9 @@
+float32 x
+float32 y
+float32 z
+float32 range
+float32 omega
+float32 azimuth
+uint8 intensity
+int8 lineID
+int16 pointID

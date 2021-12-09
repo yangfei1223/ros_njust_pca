@@ -1,0 +1,148 @@
+<launch>
+    <!--args setting-->
+    <arg name="debug" default="true" />    <!-- options: true for show rviz -->
+    <arg name="record" default="false" />
+    <arg name="detection" default="true" />
+    <!--use segmentation-->
+    <arg name="segmentation" default="false" />
+    <!--loam args-->
+    <arg name="loam" default="false" />      <!-- if use loam to location -->
+
+    <!--dataset args-->
+    <arg name="ImageStampFile" default="/tmp/exam/Camera-Timestamp.csv" />
+    <arg name="ImageDirectory" default="/tmp/exam/Camera" />
+    <arg name="VelodyneFile" default="/tmp/exam/HDL32.pcap" />
+    <arg name="LaserFile" default="/tmp/exam/URG.lms" />
+    <arg name="IMUFile" default="/tmp/exam/IMU.csv" />
+    <arg name="GPSFile" default="/tmp/exam/GPS.csv" />
+    <arg name="CanbusGearFile" default="/tmp/exam/Canbus-Gear.csv" />
+    <arg name="CanbusOdomFile" default="/tmp/exam/Canbus-Odom.csv" />
+    <arg name="CanbusSteerFile" default="/tmp/exam/Canbus-Steer.csv" />
+
+    <arg name="CmeraCalibFile" default="/tmp/exam/Calib/Camera.camera" />
+    <arg name="VeloCalibFile" default="/tmp/exam/Calib/HDL32-E.txt" />
+    <arg name="GPSCalibFile" default="/tmp/exam/Calib/GPS.txt" />
+
+    <arg name="TaskFile" default="/tmp/exam/Task.txt" />
+
+    <arg name="MapSaveFile" default="/home/njust1/map.png" />
+
+
+    <!--model args-->
+    <arg name="frcnnNetworkFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/frcnn/models/coco/VGG16/faster_rcnn_end2end/test.prototxt" />
+    <arg name="frcnnModelFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/frcnn/data/faster_rcnn_models/coco_vgg16_faster_rcnn_final.caffemodel" />
+    <arg name="enetNetworkFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/ENet/final_model_weights/bn_conv_merged_model.prototxt" />
+    <arg name="enetModelFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/ENet/final_model_weights/bn_conv_merged_weights.caffemodel" />
+    <arg name="svmModelFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/svm_box/models/svm_pca_pso.model" />
+    <arg name="meanValFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/svm_box/features/PCA/meanVal_train.mean" />
+    <arg name="eigenValFile" default="/home/njust1/catkin_ws/src/ros_njust_pca/scripts/svm_box/features/PCA/n_eigVects_train.eig" />
+
+
+    <!--main node-->
+    <node pkg="ros_njust_pca" type="main_node" name="main_node" output="screen" required="true">
+        <param name="ImageDirectory" value="$(arg ImageDirectory)" />
+        <param name="ImageStampFile" value="$(arg ImageStampFile)" />
+        <param name="VelodyneFile" value="$(arg VelodyneFile)" />
+        <param name="LaserFile" value="$(arg LaserFile)" />
+        <param name="IMUFile" value="$(arg IMUFile)" />
+        <param name="GPSFile" value="$(arg GPSFile)" />
+        <param name="CanbusGearFile" value="$(arg CanbusGearFile)" />
+        <param name="CanbusOdomFile" value="$(arg CanbusOdomFile)" />
+        <param name="CanbusSteerFile" value="$(arg CanbusSteerFile)" />
+        <param name="TaskFile" value="$(arg TaskFile)" />
+        <param name="detection" value="$(arg detection)" />
+    </node>
+
+    <!--fusion node-->
+    <node pkg="ros_njust_pca" type="fusion_node" name="fusion_node" output="screen" respawn="true" >
+        <param name="CmeraCalibFile" value="$(arg CmeraCalibFile)" />
+        <param name="VeloCalibFile" value="$(arg VeloCalibFile)" />
+        <param name="GPSCalibFile" value="$(arg GPSCalibFile)" />
+        <param name="MapSaveFile" value="$(arg MapSaveFile)" />
+    </node>
+
+
+    <!--object detection task-->
+    <group if="$(arg detection)">
+        <!--object node-->
+        <node pkg="ros_njust_pca" type="object_node.py" name="object_node" output="screen" respawn="true">
+            <param name="frcnnNetworkFile" value="$(arg frcnnNetworkFile)" />
+            <param name="frcnnModelFile" value="$(arg frcnnModelFile)" />
+        </node>
+
+        <!--box node-->
+        <node pkg="ros_njust_pca" type="box_node.py" name="box_node" output="screen" respawn="true">
+            <param name="svmModelFile" value="$(arg svmModelFile)" />
+            <param name="meanValFile" value="$(arg meanValFile)" />
+            <param name="eigenValFile" value="$(arg eigenValFile)" />
+        </node>
+    </group>
+
+
+    <!--environment task-->
+    <group unless="$(arg detection)">
+        <!--obs node-->
+        <node pkg="ros_njust_pca" type="obs_node" name="obs_node" output="screen" respawn="true"/>
+
+        <!--segmentation node-->
+        <group if="$(arg segmentation)">
+            <node pkg="ros_njust_pca" type="segmentation_node.py" name="segmentation_node" respawn="true">
+                <param name="enetNetworkFile" value="$(arg enetNetworkFile)" />
+                <param name="enetModelFile" value="$(arg enetModelFile)" />
+            </node>
+        </group>
+
+        <!--location node-->
+        <group unless="$(arg loam)">
+            <node pkg="ros_njust_pca" type="location_node" name="location_node" output="screen" respawn="true" />
+        </group>
+
+        <!--loam nodes-->
+        <group if="$(arg loam)">
+            <!--loam args-->
+            <arg name="scanPeriod" default="0.1" />
+
+            <node pkg="ros_njust_pca" type="multiScanRegistration" name="multiScanRegistration_node" output="screen">
+                <param name="lidar" value="HDL-32" /> <!-- options: VLP-16  HDL-32  HDL-64E -->
+                <param name="scanPeriod" value="$(arg scanPeriod)" />
+                <remap from="/multi_scan_points" to="/NJUST_Sensor/PointCloud2" />
+                <!--<remap from="/imu/data" to="/NJUST_Sensor/IMU2"/>-->
+            </node>
+
+            <node pkg="ros_njust_pca" type="laserOdometry" name="laserOdometry_node" output="screen" respawn="true">
+                <param name="scanPeriod" value="$(arg scanPeriod)" />
+            </node>
+
+            <node pkg="ros_njust_pca" type="laserMapping" name="laserMapping_node" output="screen">
+                <param name="scanPeriod" value="$(arg scanPeriod)" />
+            </node>
+
+            <node pkg="ros_njust_pca" type="transformMaintenance" name="transformMaintenance_node" output="screen">
+            </node>
+        </group>
+    </group>
+
+
+    <group if="$(arg debug)">
+        <node pkg="ros_njust_pca" type="debug_node" name="debug_node" output="screen" respawn="true" />
+
+        <!--record-->
+        <group if="$(arg record)">
+            <node pkg="rosbag" type="record" name="bag_record" args="NJUST_Sensor/Image NJUST_Sensor/VelodyneScan NJUST_Sensor/IMU NJUST_Sensor/GPS -O KYXZ2018G1_PM2" />
+        </group>
+
+        <!--rviz -->
+        <group if="$(arg detection)">
+            <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz_object" args="-d $(find ros_njust_pca)/rviz/object_detection.rviz" respawn="true" />
+        </group>
+
+        <group unless="$(arg detection)">
+            <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz_grid" args="-d $(find ros_njust_pca)/rviz/grid_map.rviz" respawn="true" />
+            <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz_traj" args="-d $(find ros_njust_pca)/rviz/trajectory.rviz" respawn="true" />
+            <group if="$(arg loam)">
+                <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz_loam" args="-d $(find ros_njust_pca)/rviz/loam_velodyne.rviz" respawn="true" />
+            </group>
+        </group>
+    </group>
+
+</launch>
